@@ -2,9 +2,12 @@ package com.guesssong.app.net
 
 import android.util.Log
 import com.guesssong.app.audio.AudioPlayer
+import com.guesssong.app.game.AnswerMode
 import com.guesssong.app.game.GameConfig
 import com.guesssong.app.game.GameRules
 import com.guesssong.app.game.GameState
+import com.guesssong.app.game.GuessFeedback
+import com.guesssong.app.game.GuessTarget
 import com.guesssong.app.game.Question
 import com.guesssong.app.game.QuestionFactory
 import com.guesssong.app.game.RoundOutcome
@@ -204,6 +207,7 @@ class GameServer(
             val line = connection.readLine() ?: return
             when (val message = Protocol.decodeClient(line)) {
                 is ClientMessage.Answer -> onAnswer(playerId, message)
+                is ClientMessage.Guess -> onGuess(playerId, message)
                 else -> Unit
             }
         }
@@ -221,6 +225,26 @@ class GameServer(
     private fun onAnswer(playerId: String, message: ClientMessage.Answer) {
         state.update { GameRules.submitAnswer(it, playerId, message.round, message.optionIndex, clock()) }
         broadcastProgress()
+    }
+
+    private fun onGuess(playerId: String, message: ClientMessage.Guess) {
+        var feedback: GuessFeedback? = null
+        state.update { current ->
+            val (next, result) = GameRules.submitGuess(current, playerId, message.round, message.text, clock())
+            feedback = result
+            next
+        }
+        val reply = feedback
+            ?.let { ServerMessage.GuessResult(message.round, it.isCorrect, it.attemptsLeft) }
+            ?: ServerMessage.GuessResult(
+                round = message.round,
+                correct = false,
+                attemptsLeft = GameRules.remainingAttempts(state.value, playerId),
+                accepted = false,
+            )
+        // Siempre se responde, para que el jugador nunca se quede en "Revisando…".
+        peers[playerId]?.let { send(it, reply) }
+        if (feedback != null) broadcastProgress()
     }
 
     private fun onPlayerLeft(playerId: String) {
@@ -278,9 +302,15 @@ class GameServer(
         try {
             broadcast(ServerMessage.Preparing("Buscando canciones de ${config.source.label}…"))
             val tracks = music.loadTracks(config.source)
-            val questions = QuestionFactory.build(tracks, config.rounds + SPARE_QUESTIONS, random)
+            val questions = QuestionFactory.build(
+                tracks = tracks,
+                count = config.rounds + SPARE_QUESTIONS,
+                random = random,
+                target = config.target,
+                optionCount = config.optionCount,
+            )
             if (questions.size < MIN_QUESTIONS) {
-                returnToLobby("No encontré suficientes canciones para ${config.source.label}. Prueba con otra opción.")
+                returnToLobby(notEnoughSongsMessage(config))
                 return
             }
             val played = playRounds(questions, minOf(config.rounds, questions.size), config, gameDir)
@@ -350,14 +380,24 @@ class GameServer(
         broadcast(ServerMessage.Preparing("Ronda $number de $total"))
         delay(timing.roundIntroMs)
 
-        state.update { GameRules.startRound(it, number, question, clock(), config.roundDurationMs) }
+        state.update {
+            GameRules.startRound(it, number, question, clock(), config.roundDurationMs, config.answerMode, config.target)
+        }
         audio.play()
+        val options = if (config.answerMode == AnswerMode.CHOICES) {
+            question.options.map { OptionDto(config.target.of(it)) }
+        } else {
+            emptyList()
+        }
         broadcast(
             ServerMessage.RoundStart(
                 round = number,
                 totalRounds = total,
-                options = question.options.map { OptionDto(it.title, it.artist) },
+                answerMode = config.answerMode,
+                target = config.target,
+                options = options,
                 durationMs = config.roundDurationMs,
+                maxAttempts = GameRules.MAX_GUESS_ATTEMPTS,
             ),
         )
         broadcastProgress()
@@ -384,9 +424,18 @@ class GameServer(
             coverUrl = answer.coverUrl,
             gains = outcome.gains,
             choices = outcome.choices,
+            guesses = outcome.guesses,
             players = playerDtos(state.value),
         )
     }
+
+    private fun notEnoughSongsMessage(config: GameConfig): String =
+        if (config.target == GuessTarget.ARTIST && config.answerMode == AnswerMode.CHOICES) {
+            "Para adivinar el artista con opciones hacen falta al menos 4 artistas distintos en " +
+                "${config.source.label}. Prueba otra búsqueda o el modo escribir."
+        } else {
+            "No encontré suficientes canciones para ${config.source.label}. Prueba con otra opción."
+        }
 
     private fun returnToLobby(notice: String) {
         state.update { GameRules.resetForNewGame(it) }

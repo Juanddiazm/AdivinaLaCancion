@@ -1,7 +1,11 @@
 package com.guesssong.app.net
 
 import com.guesssong.app.audio.AudioPlayer
+import com.guesssong.app.game.AnswerMode
 import com.guesssong.app.game.GameConfig
+import com.guesssong.app.game.GameRules
+import com.guesssong.app.game.GuessTarget
+import com.guesssong.app.game.track
 import com.guesssong.app.game.tracks
 import com.guesssong.app.model.Genre
 import com.guesssong.app.model.MusicSource
@@ -128,6 +132,45 @@ class GameServerIntegrationTest {
 
             ana.awaitReveal(1)
             ana.state.first { it.phase == ClientPhase.Finished }
+        }
+    }
+
+    @Test
+    fun `typing game judges guesses with typos and ends rounds when everyone is done`() = runBlocking<Unit> {
+        withTimeout(20_000) {
+            // Todas de Shakira: en modo escribir no hacen falta 4 artistas distintos.
+            val port = startServer(FakeMusic { (1L..6).map { track(it, artist = "Shakira") } })
+            val ana = join(port, "Ana")
+            val beto = join(port, "Beto")
+            ana.state.first { it.players.size == 2 }
+
+            val config = GameConfig(
+                MusicSource.Search("shakira"), rounds = 1, roundSeconds = 30,
+                answerMode = AnswerMode.TYPING, target = GuessTarget.ARTIST,
+            )
+            server.startGame(config)
+            val question = ana.awaitQuestion(1)
+            assertEquals(AnswerMode.TYPING, question.answerMode)
+            assertTrue(question.options.isEmpty())
+            beto.awaitQuestion(1)
+
+            ana.guess("shakiraa")
+            ana.state.first { (it.phase as? ClientPhase.Question)?.guessStatus == GuessStatus.CORRECT }
+            repeat(GameRules.MAX_GUESS_ATTEMPTS) { attempt ->
+                beto.guess("bad bunny")
+                beto.state.first {
+                    (it.phase as? ClientPhase.Question)?.attemptsLeft == GameRules.MAX_GUESS_ATTEMPTS - attempt - 1 ||
+                        it.phase is ClientPhase.Reveal
+                }
+            }
+
+            // 30 s por ronda: solo termina a tiempo si el host cierra la ronda al terminar todos.
+            val anaReveal = ana.awaitReveal(1)
+            val betoReveal = beto.awaitReveal(1)
+            assertTrue(anaReveal.myGain > 0)
+            assertEquals("shakiraa", anaReveal.myGuess)
+            assertEquals(0, betoReveal.myGain)
+            assertEquals("bad bunny", betoReveal.myGuess)
         }
     }
 

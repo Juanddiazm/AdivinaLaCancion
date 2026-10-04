@@ -58,4 +58,30 @@ class QuestionFactoryTest {
     fun `zero count returns empty`() {
         assertTrue(QuestionFactory.build(tracks(10), count = 0).isEmpty())
     }
+
+    @Test
+    fun `artist questions have four different artists`() {
+        val pool = (1L..20).map { track(it, artist = "Artista ${it % 6}") }
+        val questions = QuestionFactory.build(pool, count = 10, random = Random(3), target = GuessTarget.ARTIST)
+
+        assertEquals(10, questions.size)
+        questions.forEach { q ->
+            assertEquals(4, q.options.map { it.artist }.toSet().size)
+            assertEquals(q.answer, q.options[q.correctIndex])
+        }
+    }
+
+    @Test
+    fun `artist questions need at least four artists`() {
+        val pool = (1L..20).map { track(it, artist = "Shakira") }
+        assertTrue(QuestionFactory.build(pool, count = 5, target = GuessTarget.ARTIST).isEmpty())
+    }
+
+    @Test
+    fun `typing questions need a single option so one artist is enough`() {
+        val pool = (1L..3).map { track(it, artist = "Shakira") }
+        val questions = QuestionFactory.build(pool, count = 3, target = GuessTarget.ARTIST, optionCount = 1)
+        assertEquals(3, questions.size)
+        questions.forEach { assertEquals(listOf(it.answer), it.options) }
+    }
 }

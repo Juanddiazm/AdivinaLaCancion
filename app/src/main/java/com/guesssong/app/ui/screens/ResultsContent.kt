@@ -42,8 +42,8 @@ import com.guesssong.app.ui.theme.GameColors
 @Composable
 fun RevealContent(phase: ClientPhase.Reveal, state: ClientState) {
     val (headline, color) = when {
-        phase.selectedIndex == null -> "No respondiste a tiempo" to MaterialTheme.colorScheme.onSurfaceVariant
-        phase.selectedIndex == phase.correctIndex -> "¡Correcto! +${phase.myGain}" to GameColors.correct
+        !phase.didAnswer -> "No respondiste a tiempo" to MaterialTheme.colorScheme.onSurfaceVariant
+        phase.myGain > 0 -> "¡Correcto! +${phase.myGain}" to GameColors.correct
         else -> "¡Fallaste!" to GameColors.wrong
     }
     Column(
@@ -60,6 +60,9 @@ fun RevealContent(phase: ClientPhase.Reveal, state: ClientState) {
             textAlign = TextAlign.Center,
         )
         Text(phase.artist, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        phase.myGuess?.let {
+            Text("Escribiste: \u201C$it\u201D", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+        }
         Leaderboard(state.ranking, state.myId, limit = LEADERBOARD_PREVIEW)
         Text(
             if (phase.round < phase.totalRounds) "La siguiente ronda empieza en un momento…" else "Calculando el ganador…",

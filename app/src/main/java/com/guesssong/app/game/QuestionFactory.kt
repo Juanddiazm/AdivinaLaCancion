@@ -17,26 +17,39 @@ object QuestionFactory {
 
     /**
      * Arma hasta [count] preguntas sin repetir canción. Las opciones incorrectas salen del
-     * mismo grupo, así que todas suenan "del mismo estilo". Lista vacía si no alcanzan.
+     * mismo grupo y nunca coinciden con la respuesta en lo que se adivina ([target]): si se
+     * adivina el artista, las 4 opciones son artistas distintos. Lista vacía si no alcanzan.
      */
-    fun build(tracks: List<Track>, count: Int, random: Random = Random.Default): List<Question> {
+    fun build(
+        tracks: List<Track>,
+        count: Int,
+        random: Random = Random.Default,
+        target: GuessTarget = GuessTarget.TITLE,
+        optionCount: Int = OPTIONS_PER_QUESTION,
+    ): List<Question> {
         val pool = tracks
-            .filter { it.previewUrl.isNotBlank() && it.title.isNotBlank() }
+            .filter { it.previewUrl.isNotBlank() && it.title.isNotBlank() && it.artist.isNotBlank() }
             .distinctBy { it.id }
             .distinctBy { normalizeTitle(it.title) }
-        if (pool.size < OPTIONS_PER_QUESTION || count <= 0) return emptyList()
+        val key: (Track) -> String = { normalizeTitle(target.of(it)) }
+        if (count <= 0 || optionCount <= 0 || pool.distinctBy(key).size < optionCount) return emptyList()
 
         return pool.shuffled(random).take(count).map { answer ->
             val distractors = pool
-                .filter { it.id != answer.id }
+                .filter { key(it) != key(answer) }
                 .shuffled(random)
-                .take(OPTIONS_PER_QUESTION - 1)
+                .distinctBy(key)
+                .take(optionCount - 1)
             val options = (distractors + answer).shuffled(random)
             Question(answer = answer, options = options, correctIndex = options.indexOf(answer))
         }
     }
 
-    /** "Dai Dai (Remix)" y "Dai Dai - Live" cuentan como la misma canción. */
+    /**
+     * "Dai Dai (Remix)" y "Dai Dai - Live" cuentan como la misma canción. Si no queda nada
+     * (p. ej. "(Intro)"), se usa el título completo.
+     */
     fun normalizeTitle(title: String): String =
         title.replace(PARENTHESES, "").replace(SUFFIX, "").trim().lowercase()
+            .ifBlank { title.trim().lowercase() }
 }

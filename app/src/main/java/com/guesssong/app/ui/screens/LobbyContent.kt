@@ -39,7 +39,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.guesssong.app.game.AnswerMode
 import com.guesssong.app.game.GameConfig
+import com.guesssong.app.game.GameRules
+import com.guesssong.app.game.GuessTarget
 import com.guesssong.app.model.Genre
 import com.guesssong.app.model.MusicSource
 import com.guesssong.app.net.ClientState
@@ -115,6 +118,9 @@ private fun PlayersCard(state: ClientState) {
 
 private enum class SourceMode(val label: String) { Genre("Género"), Search("Buscar") }
 
+private val ANSWER_MODE_LABELS = linkedMapOf(AnswerMode.CHOICES to "Opciones", AnswerMode.TYPING to "Escribiendo")
+private val TARGET_LABELS = linkedMapOf(GuessTarget.TITLE to "Canción", GuessTarget.ARTIST to "Artista")
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HostSettings(genres: List<Genre>, onStartGame: (GameConfig) -> Unit) {
@@ -123,6 +129,8 @@ private fun HostSettings(genres: List<Genre>, onStartGame: (GameConfig) -> Unit)
     var query by rememberSaveable { mutableStateOf("") }
     var rounds by rememberSaveable { mutableIntStateOf(10) }
     var seconds by rememberSaveable { mutableIntStateOf(20) }
+    var answerMode by rememberSaveable { mutableStateOf(AnswerMode.CHOICES) }
+    var target by rememberSaveable { mutableStateOf(GuessTarget.TITLE) }
 
     val source: MusicSource? = when (mode) {
         SourceMode.Genre -> genres.firstOrNull { it.id == genreId }?.let { MusicSource.Chart(it.id, it.name) }
@@ -164,16 +172,43 @@ private fun HostSettings(genres: List<Genre>, onStartGame: (GameConfig) -> Unit)
                 )
             }
 
+            SegmentedChoice("Qué adivinan", TARGET_LABELS, target) { target = it }
+            SegmentedChoice("Cómo responden", ANSWER_MODE_LABELS, answerMode) { answerMode = it }
+            if (answerMode == AnswerMode.TYPING) {
+                Text(
+                    "Escriben la respuesta (se perdonan errores de ortografía) y tienen " +
+                        "${GameRules.MAX_GUESS_ATTEMPTS} intentos. Recomendado: 30s por ronda.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             ChoiceRow("Rondas", GameConfig.ROUND_CHOICES, rounds, { "$it" }) { rounds = it }
             ChoiceRow("Tiempo por ronda", GameConfig.SECONDS_CHOICES, seconds, { "${it}s" }) { seconds = it }
 
             Button(
-                onClick = { source?.let { onStartGame(GameConfig(it, rounds, seconds)) } },
+                onClick = { source?.let { onStartGame(GameConfig(it, rounds, seconds, answerMode, target)) } },
                 enabled = source != null,
                 modifier = Modifier.fillMaxWidth().height(56.dp),
             ) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = null)
                 Text("  ¡Empezar!", style = MaterialTheme.typography.titleMedium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun <T> SegmentedChoice(title: String, options: Map<T, String>, selected: T, onSelect: (T) -> Unit) {
+    Column {
+        Text(title, style = MaterialTheme.typography.labelLarge)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            options.entries.forEachIndexed { index, (value, label) ->
+                SegmentedButton(
+                    selected = value == selected,
+                    onClick = { onSelect(value) },
+                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                ) { Text(label) }
             }
         }
     }

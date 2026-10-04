@@ -1,14 +1,26 @@
 package com.guesssong.app.net
 
+import com.guesssong.app.game.AnswerMode
+import com.guesssong.app.game.GuessTarget
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ClientReducerTest {
-    private val options = listOf(OptionDto("A", "a"), OptionDto("B", "b"), OptionDto("C", "c"), OptionDto("D", "d"))
+    private val options = listOf(OptionDto("A"), OptionDto("B"), OptionDto("C"), OptionDto("D"))
     private val welcomed = ClientReducer.reduce(ClientState(), ServerMessage.Welcome("me", "Sala de Ana"), 0)
-    private val inQuestion = ClientReducer.reduce(welcomed, ServerMessage.RoundStart(2, 5, options, 15_000), nowMs = 42)
+    private val inQuestion = ClientReducer.reduce(
+        welcomed,
+        ServerMessage.RoundStart(2, 5, AnswerMode.CHOICES, GuessTarget.TITLE, options, 15_000, maxAttempts = 3),
+        nowMs = 42,
+    )
+    private val inTyping = ClientReducer.reduce(
+        welcomed,
+        ServerMessage.RoundStart(2, 5, AnswerMode.TYPING, GuessTarget.ARTIST, emptyList(), 30_000, maxAttempts = 3),
+        nowMs = 42,
+    )
 
     @Test
     fun `welcome connects and stores identity`() {
@@ -52,7 +64,7 @@ class ClientReducerTest {
     fun `round end reveals my result`() {
         val selected = ClientReducer.select(inQuestion, 1)!!
         val players = listOf(PlayerDto("me", "Ana", 800, true))
-        val end = ServerMessage.RoundEnd(2, 5, 1, "B", "b", "https://c", mapOf("me" to 800), mapOf("me" to 1), players)
+        val end = ServerMessage.RoundEnd(2, 5, 1, "B", "b", "https://c", mapOf("me" to 800), mapOf("me" to 1), players = players)
 
         val state = ClientReducer.reduce(selected, end, 0)
 
@@ -66,7 +78,7 @@ class ClientReducerTest {
 
     @Test
     fun `round end without my answer shows no selection`() {
-        val end = ServerMessage.RoundEnd(2, 5, 1, "B", "b", null, emptyMap(), emptyMap(), emptyList())
+        val end = ServerMessage.RoundEnd(2, 5, 1, "B", "b", null, emptyMap(), emptyMap(), players = emptyList())
         val reveal = ClientReducer.reduce(inQuestion, end, 0).phase as ClientPhase.Reveal
         assertNull(reveal.selectedIndex)
         assertEquals(0, reveal.myGain)
@@ -87,5 +99,63 @@ class ClientReducerTest {
             players = listOf(PlayerDto("a", "Ana", 10, true), PlayerDto("b", "Beto", 90, true)),
         )
         assertEquals(listOf("Beto", "Ana"), state.ranking.map { it.name })
+    }
+
+    @Test
+    fun `typing round starts with full attempts and no options`() {
+        val phase = inTyping.phase as ClientPhase.Question
+        assertEquals(AnswerMode.TYPING, phase.answerMode)
+        assertEquals(GuessTarget.ARTIST, phase.target)
+        assertEquals(3, phase.attemptsLeft)
+        assertNull(ClientReducer.select(inTyping, 0))
+        assertNull(ClientReducer.guess(inQuestion, "algo"))
+    }
+
+    @Test
+    fun `guess waits for the host and reacts to each result`() {
+        val checking = ClientReducer.guess(inTyping, "  shakiraa ")!!
+        val phase = checking.phase as ClientPhase.Question
+        assertEquals(GuessStatus.CHECKING, phase.guessStatus)
+        assertEquals("shakiraa", phase.lastGuess)
+        assertNull(ClientReducer.guess(checking, "otra"))
+
+        val wrong = ClientReducer.reduce(checking, ServerMessage.GuessResult(2, correct = false, attemptsLeft = 2), 0)
+        assertEquals(GuessStatus.WRONG, (wrong.phase as ClientPhase.Question).guessStatus)
+        assertFalse((wrong.phase as ClientPhase.Question).isDone)
+
+        val out = ClientReducer.reduce(wrong, ServerMessage.GuessResult(2, correct = false, attemptsLeft = 0), 0)
+        assertEquals(GuessStatus.OUT_OF_ATTEMPTS, (out.phase as ClientPhase.Question).guessStatus)
+        assertNull(ClientReducer.guess(out, "otra"))
+
+        val right = ClientReducer.reduce(checking, ServerMessage.GuessResult(2, correct = true, attemptsLeft = 2), 0)
+        assertTrue((right.phase as ClientPhase.Question).isDone)
+    }
+
+    @Test
+    fun `blank guess is not sent`() {
+        assertNull(ClientReducer.guess(inTyping, "   "))
+    }
+
+    @Test
+    fun `typing reveal shows what I wrote`() {
+        val end = ServerMessage.RoundEnd(
+            2, 5, 0, "She Wolf", "Shakira", null,
+            gains = mapOf("me" to 700), choices = emptyMap(), guesses = mapOf("me" to "shakiraa"), players = emptyList(),
+        )
+        val reveal = ClientReducer.reduce(inTyping, end, 0).phase as ClientPhase.Reveal
+        assertEquals("shakiraa", reveal.myGuess)
+        assertTrue(reveal.didAnswer)
+        assertEquals(AnswerMode.TYPING, reveal.answerMode)
+    }
+
+    @Test
+    fun `ignored guess returns to idle instead of hanging in checking`() {
+        val checking = ClientReducer.guess(inTyping, "algo")!!
+        val ignored = ClientReducer.reduce(
+            checking, ServerMessage.GuessResult(2, correct = false, attemptsLeft = 3, accepted = false), 0,
+        )
+        val phase = ignored.phase as ClientPhase.Question
+        assertEquals(GuessStatus.IDLE, phase.guessStatus)
+        assertEquals(3, phase.attemptsLeft)
     }
 }

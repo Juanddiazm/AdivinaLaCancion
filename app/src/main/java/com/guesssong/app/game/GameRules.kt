@@ -7,7 +7,13 @@ data class PlayerState(
     val connected: Boolean = true,
 )
 
-data class SubmittedAnswer(val optionIndex: Int, val elapsedMs: Long)
+/** Respuesta final de un jugador en la ronda (ya no puede volver a responder). */
+data class SubmittedAnswer(
+    val isCorrect: Boolean,
+    val elapsedMs: Long,
+    /** Solo en modo opciones. */
+    val optionIndex: Int? = null,
+)
 
 data class RoundState(
     val number: Int,
@@ -16,7 +22,12 @@ data class RoundState(
     val durationMs: Long,
     /** Jugadores conectados al empezar la ronda; quien entra después mira hasta la siguiente. */
     val participants: Set<String>,
+    val answerMode: AnswerMode = AnswerMode.CHOICES,
+    val target: GuessTarget = GuessTarget.TITLE,
     val answers: Map<String, SubmittedAnswer> = emptyMap(),
+    /** Modo escribir: intentos usados y último texto enviado por jugador. */
+    val attempts: Map<String, Int> = emptyMap(),
+    val lastGuesses: Map<String, String> = emptyMap(),
 )
 
 data class GameState(
@@ -29,14 +40,20 @@ data class RoundOutcome(
     val question: Question,
     /** Puntos ganados en la ronda por jugador. */
     val gains: Map<String, Int>,
-    /** Opción elegida por cada jugador que respondió. */
+    /** Opción elegida por cada jugador que respondió (modo opciones). */
     val choices: Map<String, Int>,
+    /** Último texto enviado por cada jugador (modo escribir). */
+    val guesses: Map<String, String>,
 )
+
+/** Lo que se le responde a un jugador tras cada intento escrito. */
+data class GuessFeedback(val isCorrect: Boolean, val attemptsLeft: Int)
 
 /** Reglas puras del juego: cada función recibe un estado y devuelve uno nuevo. */
 object GameRules {
     const val MAX_NAME_LENGTH = 16
     const val DEFAULT_NAME = "Jugador"
+    const val MAX_GUESS_ATTEMPTS = 3
 
     /** Margen para respuestas que llegan justo al final por latencia de red. */
     const val LATE_GRACE_MS = 500L
@@ -89,6 +106,8 @@ object GameRules {
         question: Question,
         nowMs: Long,
         durationMs: Long,
+        answerMode: AnswerMode = AnswerMode.CHOICES,
+        target: GuessTarget = GuessTarget.TITLE,
     ): GameState = state.copy(
         round = RoundState(
             number = number,
@@ -96,10 +115,20 @@ object GameRules {
             startedAtMs = nowMs,
             durationMs = durationMs,
             participants = state.players.values.filter { it.connected }.map { it.id }.toSet(),
+            answerMode = answerMode,
+            target = target,
         ),
     )
 
-    /** Registra la primera respuesta válida del jugador; cualquier otra cosa se ignora. */
+    /** ¿Puede este jugador responder ahora mismo en esta ronda y modo? */
+    private fun canAnswer(round: RoundState, mode: AnswerMode, playerId: String, roundNumber: Int, elapsed: Long) =
+        round.answerMode == mode &&
+            round.number == roundNumber &&
+            playerId in round.participants &&
+            playerId !in round.answers &&
+            elapsed in 0..(round.durationMs + LATE_GRACE_MS)
+
+    /** Modo opciones: registra la primera respuesta válida; cualquier otra cosa se ignora. */
     fun submitAnswer(
         state: GameState,
         playerId: String,
@@ -109,14 +138,54 @@ object GameRules {
     ): GameState {
         val round = state.round ?: return state
         val elapsed = nowMs - round.startedAtMs
-        val isValid = round.number == roundNumber &&
-            playerId in round.participants &&
-            playerId !in round.answers &&
-            optionIndex in round.question.options.indices &&
-            elapsed in 0..(round.durationMs + LATE_GRACE_MS)
-        if (!isValid) return state
-        val answer = SubmittedAnswer(optionIndex, elapsed)
+        if (!canAnswer(round, AnswerMode.CHOICES, playerId, roundNumber, elapsed)) return state
+        if (optionIndex !in round.question.options.indices) return state
+        val answer = SubmittedAnswer(
+            isCorrect = optionIndex == round.question.correctIndex,
+            elapsedMs = elapsed,
+            optionIndex = optionIndex,
+        )
         return state.copy(round = round.copy(answers = round.answers + (playerId to answer)))
+    }
+
+    /**
+     * Modo escribir: evalúa un intento con tolerancia a errores. El jugador termina al acertar
+     * o al gastar sus [MAX_GUESS_ATTEMPTS] intentos. Feedback null si el intento se ignoró.
+     */
+    fun submitGuess(
+        state: GameState,
+        playerId: String,
+        roundNumber: Int,
+        text: String,
+        nowMs: Long,
+    ): Pair<GameState, GuessFeedback?> {
+        val round = state.round ?: return state to null
+        val elapsed = nowMs - round.startedAtMs
+        val guess = text.trim().take(AnswerMatcher.MAX_GUESS_LENGTH)
+        if (guess.isEmpty() || !canAnswer(round, AnswerMode.TYPING, playerId, roundNumber, elapsed)) {
+            return state to null
+        }
+        val attempts = (round.attempts[playerId] ?: 0) + 1
+        val expected = round.target.of(round.question.answer)
+        val isCorrect = when (round.target) {
+            GuessTarget.TITLE -> AnswerMatcher.matches(guess, expected)
+            GuessTarget.ARTIST -> AnswerMatcher.matchesArtist(guess, expected)
+        }
+        val finished = isCorrect || attempts >= MAX_GUESS_ATTEMPTS
+        val answers = if (finished) round.answers + (playerId to SubmittedAnswer(isCorrect, elapsed)) else round.answers
+        val next = round.copy(
+            answers = answers,
+            attempts = round.attempts + (playerId to attempts),
+            lastGuesses = round.lastGuesses + (playerId to guess),
+        )
+        return state.copy(round = next) to GuessFeedback(isCorrect, MAX_GUESS_ATTEMPTS - attempts)
+    }
+
+    /** Intentos que le quedan al jugador en la ronda actual (0 si ya terminó). */
+    fun remainingAttempts(state: GameState, playerId: String): Int {
+        val round = state.round ?: return 0
+        if (playerId in round.answers) return 0
+        return MAX_GUESS_ATTEMPTS - (round.attempts[playerId] ?: 0)
     }
 
     fun connectedCount(state: GameState): Int = state.players.values.count { it.connected }
@@ -127,6 +196,7 @@ object GameRules {
         return round.participants.count { state.players[it]?.connected == true }
     }
 
+    /** Jugadores conectados que ya terminaron la ronda. */
     fun answeredCount(state: GameState): Int {
         val round = state.round ?: return 0
         return round.answers.keys.count { state.players[it]?.connected == true }
@@ -142,18 +212,15 @@ object GameRules {
     fun finishRound(state: GameState): Pair<GameState, RoundOutcome?> {
         val round = state.round ?: return state to null
         val gains = round.answers.mapValues { (_, answer) ->
-            Scoring.pointsFor(
-                isCorrect = answer.optionIndex == round.question.correctIndex,
-                elapsedMs = answer.elapsedMs,
-                roundDurationMs = round.durationMs,
-            )
+            Scoring.pointsFor(answer.isCorrect, answer.elapsedMs, round.durationMs)
         }
         val players = state.players.mapValues { (id, p) -> p.copy(score = p.score + (gains[id] ?: 0)) }
         val outcome = RoundOutcome(
             roundNumber = round.number,
             question = round.question,
             gains = gains,
-            choices = round.answers.mapValues { it.value.optionIndex },
+            choices = round.answers.mapNotNull { (id, a) -> a.optionIndex?.let { id to it } }.toMap(),
+            guesses = round.lastGuesses,
         )
         return GameState(players = players, round = null) to outcome
     }

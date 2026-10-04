@@ -48,6 +48,7 @@ fun RoomScreen(
     onStartGame: (GameConfig) -> Unit,
     onBackToLobby: () -> Unit,
     onAnswer: (Int) -> Unit,
+    onGuess: (String) -> Unit,
     onDismissNotice: () -> Unit,
     onLeave: () -> Unit,
 ) {
@@ -77,7 +78,9 @@ fun RoomScreen(
             when {
                 state == null || connection == ConnectionStatus.Connecting -> CenteredMessage("Conectando…", loading = true)
                 connection is ConnectionStatus.Closed -> ClosedContent(connection.reason, onLeave)
-                else -> PhaseContent(state, isHost, hostInfo, genres, onStartGame, onBackToLobby, onAnswer, onLeave)
+                else -> PhaseContent(
+                    state, isHost, hostInfo, genres, onStartGame, onBackToLobby, onAnswer, onGuess, onLeave,
+                )
             }
         }
     }
@@ -109,12 +112,13 @@ private fun PhaseContent(
     onStartGame: (GameConfig) -> Unit,
     onBackToLobby: () -> Unit,
     onAnswer: (Int) -> Unit,
+    onGuess: (String) -> Unit,
     onLeave: () -> Unit,
 ) {
     when (val phase = state.phase) {
         ClientPhase.Lobby -> LobbyContent(state, isHost, hostInfo, genres, onStartGame)
         is ClientPhase.Preparing -> CenteredMessage(phase.message, loading = true)
-        is ClientPhase.Question -> QuestionContent(phase, onAnswer)
+        is ClientPhase.Question -> QuestionContent(phase, onAnswer, onGuess)
         is ClientPhase.Reveal -> RevealContent(phase, state)
         ClientPhase.Finished -> FinishedContent(state, isHost, onBackToLobby, onLeave)
     }

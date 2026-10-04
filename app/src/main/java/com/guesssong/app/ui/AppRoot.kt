@@ -51,6 +51,7 @@ fun AppRoot(viewModel: SessionViewModel) {
                         onStartGame = viewModel::startGame,
                         onBackToLobby = viewModel::backToLobby,
                         onAnswer = viewModel::answer,
+                        onGuess = viewModel::guess,
                         onDismissNotice = viewModel::dismissNotice,
                         onLeave = viewModel::backToHome,
                     )

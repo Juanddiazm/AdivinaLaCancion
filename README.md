@@ -12,6 +12,16 @@ misma red Wi-Fi para adivinar la canción entre 4 opciones. Gana quien sume más
 5. Cada ronda suena un preview de 30 s en el teléfono del host. Si aciertas ganas de 100 a 1000 puntos,
    según qué tan rápido respondas.
 
+## Modos de juego
+- **Qué adivinan:** el *título* de la canción o el *artista*.
+- **Cómo responden:**
+  - *Opciones*: 4 tarjetas que muestran solo lo que se adivina, para que el artista no delate el título.
+  - *Escribiendo*: cada jugador tiene 3 intentos y se perdonan los errores de ortografía.
+    Por ejemplo, "el bale de llo pobreee" vale por "El Baile de los Pobres".
+    El texto se normaliza: sin tildes, sin "feat."/"Remix", sin letras repetidas y sin el artículo inicial.
+    Después se aceptan hasta un 25 % de letras distintas (distancia de Levenshtein).
+    En una colaboración vale cualquiera de los artistas.
+
 ## Técnico
 - Kotlin + Jetpack Compose, minSdk 26.
 - Música: API pública de Deezer (sin login), con previews de 30 s.
@@ -20,7 +30,7 @@ misma red Wi-Fi para adivinar la canción entre 4 opciones. Gana quien sume más
 - El núcleo está en `game/` (reglas puras) y `net/` (servidor, cliente y protocolo).
 
 ```bash
-./gradlew testDebugUnitTest   # 52 tests, incluida una partida completa por TCP real
+./gradlew testDebugUnitTest   # 81 tests, incluida una partida completa por TCP real
 ./gradlew assembleRelease     # APK en app/build/outputs/apk/release/
 ```
 El release está firmado con la llave debug: sirve para instalarlo directo, no para publicarlo en Play Store.

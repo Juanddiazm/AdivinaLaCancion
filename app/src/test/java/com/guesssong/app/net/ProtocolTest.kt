@@ -1,5 +1,7 @@
 package com.guesssong.app.net
 
+import com.guesssong.app.game.AnswerMode
+import com.guesssong.app.game.GuessTarget
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -8,7 +10,7 @@ import org.junit.Test
 class ProtocolTest {
     @Test
     fun `client messages round trip`() {
-        val messages = listOf(ClientMessage.Join("Ana"), ClientMessage.Answer(3, 2), ClientMessage.Pong)
+        val messages = listOf(ClientMessage.Join("Ana"), ClientMessage.Answer(3, 2), ClientMessage.Guess(3, "shakira"), ClientMessage.Pong)
         messages.forEach { assertEquals(it, Protocol.decodeClient(Protocol.encode(it))) }
     }
 
@@ -21,9 +23,11 @@ class ProtocolTest {
             ServerMessage.Players(players),
             ServerMessage.BackToLobby,
             ServerMessage.Preparing("…"),
-            ServerMessage.RoundStart(1, 10, listOf(OptionDto("T", "A")), 20_000),
+            ServerMessage.RoundStart(1, 10, AnswerMode.CHOICES, GuessTarget.TITLE, listOf(OptionDto("T")), 20_000, 3),
+            ServerMessage.RoundStart(1, 10, AnswerMode.TYPING, GuessTarget.ARTIST, emptyList(), 30_000, 3),
+            ServerMessage.GuessResult(1, correct = false, attemptsLeft = 2),
             ServerMessage.AnswerProgress(1, 2, 3),
-            ServerMessage.RoundEnd(1, 10, 2, "T", "A", null, mapOf("a" to 900), mapOf("a" to 2), players),
+            ServerMessage.RoundEnd(1, 10, 2, "T", "A", null, mapOf("a" to 900), mapOf("a" to 2), mapOf("a" to "t"), players),
             ServerMessage.GameOver(players),
             ServerMessage.Notice("hola"),
             ServerMessage.Ping,

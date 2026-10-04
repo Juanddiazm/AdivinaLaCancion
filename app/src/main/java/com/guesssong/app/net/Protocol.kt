@@ -1,10 +1,12 @@
 package com.guesssong.app.net
 
+import com.guesssong.app.game.AnswerMode
+import com.guesssong.app.game.GuessTarget
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-const val PROTOCOL_VERSION = 1
+const val PROTOCOL_VERSION = 2
 const val GAME_PORT = 47778
 const val DISCOVERY_PORT = 47777
 
@@ -12,7 +14,7 @@ const val DISCOVERY_PORT = 47777
 data class PlayerDto(val id: String, val name: String, val score: Int, val connected: Boolean)
 
 @Serializable
-data class OptionDto(val title: String, val artist: String)
+data class OptionDto(val label: String)
 
 /** Mensajes que un jugador envía al host. */
 @Serializable
@@ -24,6 +26,10 @@ sealed interface ClientMessage {
     @Serializable
     @SerialName("answer")
     data class Answer(val round: Int, val optionIndex: Int) : ClientMessage
+
+    @Serializable
+    @SerialName("guess")
+    data class Guess(val round: Int, val text: String) : ClientMessage
 
     @Serializable
     @SerialName("pong")
@@ -58,8 +64,23 @@ sealed interface ServerMessage {
     data class RoundStart(
         val round: Int,
         val totalRounds: Int,
+        val answerMode: AnswerMode,
+        val target: GuessTarget,
+        /** Vacío en modo escribir. */
         val options: List<OptionDto>,
         val durationMs: Long,
+        val maxAttempts: Int,
+    ) : ServerMessage
+
+    /** Solo para quien envió el intento escrito. */
+    @Serializable
+    @SerialName("guess_result")
+    data class GuessResult(
+        val round: Int,
+        val correct: Boolean,
+        val attemptsLeft: Int,
+        /** False si el host descartó el intento (p. ej. llegó tarde): no gasta intentos. */
+        val accepted: Boolean = true,
     ) : ServerMessage
 
     @Serializable
@@ -77,6 +98,7 @@ sealed interface ServerMessage {
         val coverUrl: String? = null,
         val gains: Map<String, Int>,
         val choices: Map<String, Int>,
+        val guesses: Map<String, String> = emptyMap(),
         val players: List<PlayerDto>,
     ) : ServerMessage
 

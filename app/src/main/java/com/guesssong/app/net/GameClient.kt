@@ -73,6 +73,14 @@ class GameClient(private val clock: () -> Long) {
         outbox.trySend(Protocol.encode(ClientMessage.Answer(round, optionIndex)))
     }
 
+    fun guess(text: String) {
+        val current = _state.value
+        val updated = ClientReducer.guess(current, text) ?: return
+        if (!_state.compareAndSet(current, updated)) return
+        val phase = updated.phase as ClientPhase.Question
+        outbox.trySend(Protocol.encode(ClientMessage.Guess(phase.round, phase.lastGuess.orEmpty())))
+    }
+
     fun dismissNotice() {
         _state.update { it.copy(notice = null) }
     }

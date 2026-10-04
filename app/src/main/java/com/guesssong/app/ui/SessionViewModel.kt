@@ -153,6 +153,10 @@ class SessionViewModel(app: Application) : AndroidViewModel(app) {
         client.value?.answer(optionIndex)
     }
 
+    fun guess(text: String) {
+        client.value?.guess(text)
+    }
+
     fun dismissNotice() {
         client.value?.dismissNotice()
     }

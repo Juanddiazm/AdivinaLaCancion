@@ -138,4 +138,77 @@ class GameRulesTest {
         assertEquals(1, GameRules.participantCount(state))
         assertSame(state, GameRules.submitAnswer(state, "late", 1, 1, 2_100))
     }
+
+    private val songQuestion = Question(
+        answer = track(9, title = "El Baile de los Pobres", artist = "Calle 13"),
+        options = listOf(track(9, title = "El Baile de los Pobres", artist = "Calle 13")),
+        correctIndex = 0,
+    )
+
+    private fun typingRound(state: GameState, target: GuessTarget = GuessTarget.TITLE) = GameRules.startRound(
+        state, number = 1, question = songQuestion, nowMs = 1_000, durationMs = 20_000,
+        answerMode = AnswerMode.TYPING, target = target,
+    )
+
+    @Test
+    fun `typed guess with typos scores like a correct answer`() {
+        val (state, feedback) = GameRules.submitGuess(typingRound(lobbyWith("Ana")), "p0", 1, "el bale de llo pobreee", 1_000)
+
+        assertEquals(GuessFeedback(isCorrect = true, attemptsLeft = 2), feedback)
+        val (after, outcome) = GameRules.finishRound(state)
+        assertEquals(Scoring.MAX_POINTS, after.players.getValue("p0").score)
+        assertEquals("el bale de llo pobreee", outcome!!.guesses["p0"])
+        assertTrue(outcome.choices.isEmpty())
+    }
+
+    @Test
+    fun `wrong guesses use attempts until the player is out`() {
+        var state = typingRound(lobbyWith("Ana", "Beto"))
+        repeat(GameRules.MAX_GUESS_ATTEMPTS - 1) { i ->
+            val (next, feedback) = GameRules.submitGuess(state, "p0", 1, "otra cosa $i", 2_000)
+            assertEquals(GuessFeedback(false, GameRules.MAX_GUESS_ATTEMPTS - 1 - i), feedback)
+            assertFalse(GameRules.allAnswered(next))
+            state = next
+        }
+        val (last, feedback) = GameRules.submitGuess(state, "p0", 1, "ni idea", 3_000)
+        assertEquals(GuessFeedback(false, 0), feedback)
+        assertEquals(1, GameRules.answeredCount(last))
+
+        val (ignored, none) = GameRules.submitGuess(last, "p0", 1, "el baile de los pobres", 3_100)
+        assertSame(last, ignored)
+        assertNull(none)
+        assertEquals(0, GameRules.finishRound(last).first.players.getValue("p0").score)
+    }
+
+    @Test
+    fun `no more guesses after a correct one`() {
+        val (state, _) = GameRules.submitGuess(typingRound(lobbyWith("Ana")), "p0", 1, "baile de los pobres", 2_000)
+        assertNull(GameRules.submitGuess(state, "p0", 1, "otra", 2_100).second)
+    }
+
+    @Test
+    fun `typing round can target the artist`() {
+        val round = typingRound(lobbyWith("Ana"), GuessTarget.ARTIST)
+        assertEquals(true, GameRules.submitGuess(round, "p0", 1, "calle trece 13", 2_000).second?.isCorrect?.not())
+        assertEquals(true, GameRules.submitGuess(round, "p0", 1, "calle 13", 2_000).second?.isCorrect)
+    }
+
+    @Test
+    fun `answers of the wrong mode or blank guesses are ignored`() {
+        val typing = typingRound(lobbyWith("Ana"))
+        assertSame(typing, GameRules.submitAnswer(typing, "p0", 1, 0, 2_000))
+        assertNull(GameRules.submitGuess(typing, "p0", 1, "   ", 2_000).second)
+        val choices = inRound(lobbyWith("Ana"))
+        assertNull(GameRules.submitGuess(choices, "p0", 1, "algo", 2_000).second)
+    }
+
+    @Test
+    fun `remaining attempts reports what the player has left`() {
+        val round = typingRound(lobbyWith("Ana"))
+        assertEquals(GameRules.MAX_GUESS_ATTEMPTS, GameRules.remainingAttempts(round, "p0"))
+        val (after, _) = GameRules.submitGuess(round, "p0", 1, "nope", 2_000)
+        assertEquals(GameRules.MAX_GUESS_ATTEMPTS - 1, GameRules.remainingAttempts(after, "p0"))
+        val (done, _) = GameRules.submitGuess(after, "p0", 1, "baile de los pobres", 2_100)
+        assertEquals(0, GameRules.remainingAttempts(done, "p0"))
+    }
 }
