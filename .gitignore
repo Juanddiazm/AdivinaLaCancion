@@ -1,0 +1,16 @@
+*.iml
+.gradle/
+/local.properties
+.idea/
+.DS_Store
+/build/
+/app/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+*.keystore
+!debug.keystore
+
+# El APK se publica en GitHub Releases, no en el repo
+*.apk
+*.aab
