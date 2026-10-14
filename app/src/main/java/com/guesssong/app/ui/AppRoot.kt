@@ -14,6 +14,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.guesssong.app.ui.screens.HomeScreen
 import com.guesssong.app.ui.screens.JoinScreen
 import com.guesssong.app.ui.screens.RoomScreen
+import com.guesssong.app.ui.theme.Palette
 
 @Composable
 fun AppRoot(viewModel: SessionViewModel) {
@@ -21,7 +22,7 @@ fun AppRoot(viewModel: SessionViewModel) {
     val nickname by viewModel.nickname.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
 
-    Scaffold { padding ->
+    Scaffold(containerColor = Palette.Background) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (screen) {
                 Screen.Home -> HomeScreen(

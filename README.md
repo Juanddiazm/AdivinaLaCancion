@@ -28,6 +28,9 @@ misma red Wi-Fi para adivinar la canción entre 4 opciones. Gana quien sume más
 - Red: TCP en el puerto 47778, con JSON de una línea por mensaje. El descubrimiento de salas es por
   broadcast UDP en el puerto 47777. El host es la fuente de verdad y también se conecta a sí mismo como jugador.
 - El núcleo está en `game/` (reglas puras) y `net/` (servidor, cliente y protocolo).
+- La UI está en `ui/`: el tema (`ui/theme/Theme.kt`) define la paleta y las fuentes, y `ui/components/Kit.kt` tiene
+  las piezas compartidas (botones, avatares, ecualizador). Fuentes: Bricolage Grotesque y Figtree, ambas con
+  licencia OFL (ver `licenses/`).
 
 ```bash
 ./gradlew testDebugUnitTest   # 81 tests, incluida una partida completa por TCP real
