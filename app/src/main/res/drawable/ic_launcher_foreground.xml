@@ -1,15 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- "Disco misterioso": un vinilo cuya etiqueta lima es un signo de pregunta. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Nota musical -->
+    <!-- Disco -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M62,30 L62,62.5 C60.2,61.5 58.2,61 56,61 C49.4,61 44,65.5 44,71 C44,76.5 49.4,81 56,81 C62.6,81 68,76.5 68,71 L68,42 L78,42 L78,30 Z" />
-    <!-- Signo de pregunta -->
+        android:fillColor="#FF2A2638"
+        android:pathData="M54,23 a31,31 0 1,1 0,62 a31,31 0 1,1 0,-62 Z" />
+    <!-- Surcos -->
     <path
-        android:fillColor="#FF4DE8E0"
-        android:pathData="M36,38 C36,32.5 40.5,28 46,28 C51.5,28 55,31.8 55,36.5 C55,41 52,43 49.5,44.8 C48,45.9 47.5,46.8 47.5,49 L42.5,49 C42.5,45.5 43.5,43.6 46.3,41.6 C48.6,40 50,39 50,36.5 C50,34.3 48.3,32.6 46,32.6 C43.4,32.6 41,34.6 41,38 Z M42.5,52 L47.5,52 L47.5,57 L42.5,57 Z" />
+        android:strokeColor="#FF3A3550"
+        android:strokeWidth="1"
+        android:pathData="M54,27 a27,27 0 1,1 0,54 a27,27 0 1,1 0,-54 Z M54,31 a23,23 0 1,1 0,46 a23,23 0 1,1 0,-46 Z M54,34.5 a19.5,19.5 0 1,1 0,39 a19.5,19.5 0 1,1 0,-39 Z" />
+    <!-- Etiqueta -->
+    <path
+        android:fillColor="#FFD7FF3D"
+        android:pathData="M54,39 a15,15 0 1,1 0,30 a15,15 0 1,1 0,-30 Z" />
+    <!-- Signo de pregunta (Bricolage Grotesque), de unidades de la fuente al centro del ícono -->
+    <group
+        android:pivotX="209"
+        android:pivotY="331"
+        android:scaleX="0.0262"
+        android:scaleY="-0.0262"
+        android:translateX="-155"
+        android:translateY="-277">
+        <path
+            android:fillColor="#FF100E17"
+            android:pathData="M93,219Q88,265 97,295.5Q106,326 123.5,346Q141,366 161.5,380Q182,394 200.5,407Q219,420 231,436Q243,452 243,476Q243,507 223.5,521.5Q204,536 172,536Q150,536 124,530Q98,524 73,513.5Q48,503 25,490L18,633Q46,648 74.5,657Q103,666 133,670.5Q163,675 191,675Q232,675 269,665.5Q306,656 335.5,635Q365,614 382.5,580.5Q400,547 400,498Q400,455 386.5,426Q373,397 352,376.5Q331,356 308,340.5Q285,325 264.5,308.5Q244,292 232.5,271Q221,250 222,219ZM165,-13Q114,-13 88.5,9Q63,31 63,77Q63,124 88.5,146Q114,168 165,168Q218,168 244,146Q270,124 270,77Q270,-13 165,-13Z" />
+    </group>
 </vector>
